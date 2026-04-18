@@ -1,12 +1,10 @@
-module github.com/sandello/libdns-yandexcloud
+module github.com/sandello/libdns-yandexcloud/libdnstest
 
 go 1.24.13
 
 require (
 	github.com/libdns/libdns v1.2.0-alpha.1
-	github.com/yandex-cloud/go-genproto v0.72.0
-	github.com/yandex-cloud/go-sdk/services/dns v0.0.53
-	github.com/yandex-cloud/go-sdk/v2 v2.90.0
+	github.com/sandello/libdns-yandexcloud v0.0.0
 )
 
 require (
@@ -17,6 +15,9 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/yandex-cloud/go-genproto v0.72.0 // indirect
+	github.com/yandex-cloud/go-sdk/services/dns v0.0.53 // indirect
+	github.com/yandex-cloud/go-sdk/v2 v2.90.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/net v0.39.0 // indirect
@@ -29,3 +30,5 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+replace github.com/sandello/libdns-yandexcloud => ../

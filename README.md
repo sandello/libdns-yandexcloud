@@ -1,29 +1,24 @@
-DEVELOPER INSTRUCTIONS:
-=======================
+# Yandex Cloud DNS for libdns
 
-This repo is a template for developers to use when creating new [libdns](https://github.com/libdns/libdns) provider implementations.
+This package implements the [libdns](https://github.com/libdns/libdns) interfaces for Yandex Cloud DNS.
 
-Be sure to update:
+## Configuration
 
-- The package name
-- The Go module name in go.mod
-- The latest `libdns/libdns` version in go.mod
-- All comments and documentation, including README below and godocs
-- License (must be compatible with Apache/MIT)
-- All "TODO:"s is in the code
-- All methods that currently do nothing
+```go
+provider := &yandexcloud.Provider{
+	IAMToken: "...",
+	FolderID: "...",
+}
+```
 
-**Please be sure to conform to the semantics described at the [libdns godoc](https://github.com/libdns/libdns).**
+For workloads running on a Yandex Cloud Compute instance with an attached service account:
 
-_Remove this section from the readme before publishing._
+```go
+provider := &yandexcloud.Provider{
+	UseInstanceServiceAccount: true,
+}
+```
 
----
+When using `IAMToken`, `FolderID` is required because the Yandex Cloud DNS API lists DNS zones by folder. When using `UseInstanceServiceAccount`, `FolderID` is optional and defaults to the instance metadata folder ID. Configure exactly one authentication method: either `IAMToken` or `UseInstanceServiceAccount`.
 
-\<PROVIDER NAME\> for [`libdns`](https://github.com/libdns/libdns)
-=======================
-
-[![Go Reference](https://pkg.go.dev/badge/test.svg)](https://pkg.go.dev/github.com/libdns/TODO:PROVIDER_NAME)
-
-This package implements the [libdns interfaces](https://github.com/libdns/libdns) for \<PROVIDER\>, allowing you to manage DNS records.
-
-TODO: Show how to configure and use. Explain any caveats.
+Record changes are submitted through Yandex Cloud DNS record set operations and waited on before the libdns method returns.
