@@ -14,6 +14,22 @@ YANDEXCLOUD_TEST_ZONE=example.com.
 YANDEXCLOUD_IAM_TOKEN=your-iam-token
 ```
 
+With a user account key file:
+
+```sh
+YANDEXCLOUD_FOLDER_ID=your-folder-id
+YANDEXCLOUD_TEST_ZONE=example.com.
+YANDEXCLOUD_USER_ACCOUNT_KEY_FILE_PATH=/path/to/user-key.json
+```
+
+With a service account key file:
+
+```sh
+YANDEXCLOUD_FOLDER_ID=your-folder-id
+YANDEXCLOUD_TEST_ZONE=example.com.
+YANDEXCLOUD_SERVICE_ACCOUNT_KEY_FILE_PATH=/path/to/service-key.json
+```
+
 For a Yandex Cloud Compute instance with an attached service account:
 
 ```sh
@@ -21,7 +37,7 @@ YANDEXCLOUD_TEST_ZONE=example.com.
 YANDEXCLOUD_USE_INSTANCE_SERVICE_ACCOUNT=true
 ```
 
-In instance service account mode, `YANDEXCLOUD_FOLDER_ID` is optional and defaults to the instance metadata folder ID.
+Use exactly one authentication method. `YANDEXCLOUD_FOLDER_ID` is required unless using instance service account mode, where it is optional and defaults to the instance metadata folder ID.
 
 Run:
 

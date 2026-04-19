@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +24,6 @@ func TestRecordsFromRecordSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recordsFromRecordSet failed: %v", err)
 	}
-
 	if len(records) != 2 {
 		t.Fatalf("expected 2 records, got %d", len(records))
 	}
@@ -52,7 +52,6 @@ func TestRecordsFromRecordSetUnquotesTXT(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recordsFromRecordSet failed: %v", err)
 	}
-
 	if len(records) != 1 {
 		t.Fatalf("expected 1 record, got %d", len(records))
 	}
@@ -76,9 +75,7 @@ func TestRecordsFromRecordSetRejectsInvalidData(t *testing.T) {
 		Ttl:  300,
 		Data: []string{"not-an-ip"},
 	})
-	if err == nil {
-		t.Fatal("expected invalid record data error")
-	}
+	requireErrContains(t, err, "invalid IP address")
 }
 
 func TestRecordSetsFromRecordsGroupsValues(t *testing.T) {
@@ -127,35 +124,57 @@ func TestReplacementRecordSetsRejectMixedTTL(t *testing.T) {
 	}
 }
 
-func TestValidateAppendRecordSetTTLMatchAllowsMatchingTTL(t *testing.T) {
-	err := validateAppendRecordSetTTLMatch(&dns.RecordSet{Name: "www.example.com.", Type: "A", Ttl: 300}, map[nameTypeKey]int64{
-		{name: "www.example.com.", typ: "A"}: 300,
-	})
-	if err != nil {
-		t.Fatalf("expected matching ttl to be allowed, got %v", err)
+func TestValidateAppendRecordSetTTLMatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		recordSet *dns.RecordSet
+		appendTTL map[nameTypeKey]int64
+		wantErr   bool
+	}{
+		{
+			name:      "rejects mismatched ttl",
+			recordSet: &dns.RecordSet{Name: "www.example.com.", Type: "A", Ttl: 300},
+			appendTTL: map[nameTypeKey]int64{
+				{name: "www.example.com.", typ: "A"}: 600,
+			},
+			wantErr: true,
+		},
+		{
+			name:      "allows matching ttl",
+			recordSet: &dns.RecordSet{Name: "www.example.com.", Type: "A", Ttl: 600},
+			appendTTL: map[nameTypeKey]int64{
+				{name: "www.example.com.", typ: "A"}: 600,
+			},
+		},
+		{
+			name:      "allows different name",
+			recordSet: &dns.RecordSet{Name: "api.example.com.", Type: "A", Ttl: 300},
+			appendTTL: map[nameTypeKey]int64{
+				{name: "www.example.com.", typ: "A"}: 600,
+			},
+		},
+		{
+			name:      "allows different type",
+			recordSet: &dns.RecordSet{Name: "www.example.com.", Type: "TXT", Ttl: 300},
+			appendTTL: map[nameTypeKey]int64{
+				{name: "www.example.com.", typ: "A"}: 600,
+			},
+		},
 	}
-}
 
-func TestValidateAppendRecordSetTTLMatchRejectsMismatchedTTL(t *testing.T) {
-	err := validateAppendRecordSetTTLMatch(&dns.RecordSet{Name: "www.example.com.", Type: "A", Ttl: 300}, map[nameTypeKey]int64{
-		{name: "www.example.com.", typ: "A"}: 600,
-	})
-	if err == nil {
-		t.Fatal("expected mismatched ttl error")
-	}
-}
-
-func TestValidateAppendRecordSetTTLMatchIgnoresUnrelatedRecordSets(t *testing.T) {
-	appendTTLByKey := map[nameTypeKey]int64{
-		{name: "www.example.com.", typ: "A"}: 600,
-	}
-	for _, recordSet := range []*dns.RecordSet{
-		{Name: "api.example.com.", Type: "A", Ttl: 300},
-		{Name: "www.example.com.", Type: "TXT", Ttl: 300},
-	} {
-		if err := validateAppendRecordSetTTLMatch(recordSet, appendTTLByKey); err != nil {
-			t.Fatalf("expected unrelated record sets to be ignored, got %v", err)
-		}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateAppendRecordSetTTLMatch(test.recordSet, test.appendTTL)
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("expected mismatched ttl error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected record set to be allowed, got %v", err)
+			}
+		})
 	}
 }
 
@@ -219,8 +238,27 @@ func TestInstanceMetadataFolderIDRejectsEmptyResponse(t *testing.T) {
 	}
 }
 
+func TestSDKCredentialsFetchesMetadataFolderID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("folder"))
+	}))
+	defer server.Close()
+
+	restoreMetadata := replaceMetadataClientForTest(t, server.URL, server.Client())
+	defer restoreMetadata()
+
+	provider := Provider{UseInstanceServiceAccount: true}
+	if _, err := provider.sdkCredentials(context.Background()); err != nil {
+		t.Fatalf("sdkCredentials failed: %v", err)
+	}
+	if provider.FolderID != "folder" {
+		t.Fatalf("expected metadata folder id, got %q", provider.FolderID)
+	}
+}
+
 func replaceMetadataClientForTest(t *testing.T, url string, client *http.Client) func() {
 	t.Helper()
+
 	oldURL := metadataFolderIDURL
 	oldClient := metadataHTTPClient
 	metadataFolderIDURL = url
@@ -228,6 +266,70 @@ func replaceMetadataClientForTest(t *testing.T, url string, client *http.Client)
 	return func() {
 		metadataFolderIDURL = oldURL
 		metadataHTTPClient = oldClient
+	}
+}
+
+func TestSDKCredentialsValidation(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Provider
+		want   string
+	}{
+		{
+			name: "missing auth",
+			want: "exactly one authentication method is required, got 0",
+		},
+		{
+			name: "conflicting auth",
+			config: Provider{
+				IAMToken:                  "token",
+				UserAccountKeyFilePath:    "user-key.json",
+				UseInstanceServiceAccount: true,
+			},
+			want: "exactly one authentication method is required, got 3",
+		},
+		{
+			name:   "iam token requires folder id",
+			config: Provider{IAMToken: "token"},
+			want:   "folder_id is required",
+		},
+		{
+			name:   "user account key requires folder id",
+			config: Provider{UserAccountKeyFilePath: "user-key.json"},
+			want:   "folder_id is required",
+		},
+		{
+			name:   "service account key requires folder id",
+			config: Provider{ServiceAccountKeyFilePath: "service-key.json"},
+			want:   "folder_id is required",
+		},
+		{
+			name:   "missing user account key file",
+			config: Provider{UserAccountKeyFilePath: "missing-user-key.json", FolderID: "folder"},
+			want:   "load user account key file",
+		},
+		{
+			name:   "missing service account key file",
+			config: Provider{ServiceAccountKeyFilePath: "missing-service-key.json", FolderID: "folder"},
+			want:   "load service account key file",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := test.config.sdkCredentials(context.Background())
+			requireErrContains(t, err, test.want)
+		})
+	}
+}
+
+func requireErrContains(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected error containing %q, got nil", want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("expected error containing %q, got %q", want, err)
 	}
 }
 

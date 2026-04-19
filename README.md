@@ -11,6 +11,24 @@ provider := &yandexcloud.Provider{
 }
 ```
 
+With a user account key file:
+
+```go
+provider := &yandexcloud.Provider{
+	UserAccountKeyFilePath: "...",
+	FolderID:               "...",
+}
+```
+
+With a service account key file:
+
+```go
+provider := &yandexcloud.Provider{
+	ServiceAccountKeyFilePath: "...",
+	FolderID:                  "...",
+}
+```
+
 For workloads running on a Yandex Cloud Compute instance with an attached service account:
 
 ```go
@@ -19,6 +37,6 @@ provider := &yandexcloud.Provider{
 }
 ```
 
-When using `IAMToken`, `FolderID` is required because the Yandex Cloud DNS API lists DNS zones by folder. When using `UseInstanceServiceAccount`, `FolderID` is optional and defaults to the instance metadata folder ID. Configure exactly one authentication method: either `IAMToken` or `UseInstanceServiceAccount`.
+Configure exactly one authentication method: `IAMToken`, `UserAccountKeyFilePath`, `ServiceAccountKeyFilePath`, or `UseInstanceServiceAccount`. `FolderID` is required for all authentication methods except `UseInstanceServiceAccount`, where it is optional and defaults to the instance metadata folder ID.
 
 Record changes are submitted through Yandex Cloud DNS record set operations and waited on before the libdns method returns.

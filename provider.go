@@ -37,9 +37,17 @@ type Provider struct {
 	// IAMToken is a Yandex Cloud IAM token used for API authentication.
 	IAMToken string `json:"iam_token,omitempty"`
 
+	// UserAccountKeyFilePath is a path to a Yandex Cloud user account key file
+	// used for API authentication.
+	UserAccountKeyFilePath string `json:"user_account_key_file_path,omitempty"`
+
+	// ServiceAccountKeyFilePath is a path to a Yandex Cloud service account key
+	// file used for API authentication.
+	ServiceAccountKeyFilePath string `json:"service_account_key_file_path,omitempty"`
+
 	// FolderID is the Yandex Cloud folder ID containing the DNS zones. It is
-	// required when using IAMToken. When UseInstanceServiceAccount is enabled,
-	// it is optional and defaults to the instance metadata folder ID.
+	// required except when UseInstanceServiceAccount is enabled, where it is
+	// optional and defaults to the instance metadata folder ID.
 	FolderID string `json:"folder_id,omitempty"`
 
 	// UseInstanceServiceAccount enables authentication with the service account
@@ -268,11 +276,8 @@ func (p *Provider) getClient(ctx context.Context) (dnssdk.DnsZoneClient, error) 
 }
 
 func (p *Provider) sdkCredentials(ctx context.Context) (credentials.Credentials, error) {
-	if p.IAMToken == "" && !p.UseInstanceServiceAccount {
-		return nil, errors.New("iam_token or use_instance_service_account is required")
-	}
-	if p.IAMToken != "" && p.UseInstanceServiceAccount {
-		return nil, errors.New("iam_token and use_instance_service_account are mutually exclusive")
+	if count := p.authMethodCount(); count != 1 {
+		return nil, fmt.Errorf("exactly one authentication method is required, got %d", count)
 	}
 	if p.FolderID == "" {
 		if !p.UseInstanceServiceAccount {
@@ -287,7 +292,39 @@ func (p *Provider) sdkCredentials(ctx context.Context) (credentials.Credentials,
 	if p.UseInstanceServiceAccount {
 		return credentials.InstanceServiceAccount(), nil
 	}
-	return credentials.IAMToken(p.IAMToken), nil
+	switch {
+	case p.IAMToken != "":
+		return credentials.IAMToken(p.IAMToken), nil
+	case p.UserAccountKeyFilePath != "":
+		creds, err := credentials.UserAccountKeyFile(p.UserAccountKeyFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("load user account key file: %w", err)
+		}
+		return creds, nil
+	case p.ServiceAccountKeyFilePath != "":
+		creds, err := credentials.ServiceAccountKeyFile(p.ServiceAccountKeyFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("load service account key file: %w", err)
+		}
+		return creds, nil
+	default:
+		return nil, errors.New("no authentication method selected")
+	}
+}
+
+func (p *Provider) authMethodCount() int {
+	count := 0
+	for _, enabled := range []bool{
+		p.IAMToken != "",
+		p.UserAccountKeyFilePath != "",
+		p.ServiceAccountKeyFilePath != "",
+		p.UseInstanceServiceAccount,
+	} {
+		if enabled {
+			count++
+		}
+	}
+	return count
 }
 
 func validateAppendRecordSetTTLs(ctx context.Context, client dnssdk.DnsZoneClient, zoneID, zone string, recordSets []*dns.RecordSet) error {
